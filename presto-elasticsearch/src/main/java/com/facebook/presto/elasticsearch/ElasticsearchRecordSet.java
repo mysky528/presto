@@ -30,6 +30,7 @@ public class ElasticsearchRecordSet
     //private final ByteSource byteSource;
     private final ElasticsearchTableSource tableSource;
     private final ElasticsearchClient elasticsearchClient;
+    private ElasticsearchSplit split;
 
     public ElasticsearchRecordSet(ElasticsearchSplit split, List<ElasticsearchColumnHandle> columnHandles, ElasticsearchClient elasticsearchClient)
     {
@@ -52,6 +53,7 @@ public class ElasticsearchRecordSet
         }
         */
         tableSource = split.getUri();
+        this.split = split;
     }
 
     @Override
@@ -63,6 +65,6 @@ public class ElasticsearchRecordSet
     @Override
     public RecordCursor cursor()
     {
-        return new ElasticsearchRecordCursor(columnHandles, tableSource, elasticsearchClient);
+        return new ElasticsearchRecordCursor(columnHandles, split, elasticsearchClient);
     }
 }

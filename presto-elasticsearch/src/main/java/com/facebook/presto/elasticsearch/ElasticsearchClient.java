@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.elasticsearch;
 
+import com.facebook.presto.spi.type.DateType;
 import com.facebook.presto.spi.type.Type;
 import com.google.common.base.Function;
 import com.google.common.base.Supplier;
@@ -23,12 +24,18 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.io.Resources;
 import io.airlift.json.JsonCodec;
 import io.airlift.log.Logger;
+import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsRequest;
+import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsResponse;
 import org.elasticsearch.action.admin.indices.mapping.get.GetMappingsRequest;
+import org.elasticsearch.client.AdminClient;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.client.FilterClient;
+import org.elasticsearch.client.IndicesAdminClient;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.hppc.cursors.ObjectCursor;
+import org.elasticsearch.common.hppc.cursors.ObjectObjectCursor;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
@@ -53,7 +60,9 @@ import java.util.stream.Collectors;
 
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
+import static com.facebook.presto.spi.type.TimestampType.TIMESTAMP;
 import static com.facebook.presto.spi.type.VarcharType.VARCHAR;
+import static com.facebook.presto.spi.type.BooleanType.BOOLEAN;
 import static com.google.common.collect.Iterables.transform;
 import static com.google.common.collect.Maps.transformValues;
 import static com.google.common.collect.Maps.uniqueIndex;
@@ -61,42 +70,44 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 
-public class ElasticsearchClient
-{
+public class ElasticsearchClient {
     private static final Logger log = Logger.get(ElasticsearchClient.class);
+    private static int initialized = 0;
+    private static Map<String, List<ElasticsearchTable>> catalog = new HashMap<String,List<ElasticsearchTable>>();
+    private static Map<String, Map<String, ElasticsearchTable>> schemasMap = null;
+
+
     /**
      * SchemaName -> (TableName -> TableMetadata)
      */
     private Supplier<Map<String, Map<String, ElasticsearchTable>>> schemas;
-    private ElasticsearchConfig config;
+    private static ElasticsearchConfig config;
     private JsonCodec<Map<String, List<ElasticsearchTable>>> catalogCodec;
     private ImmutableMap<String, Client> internalClients;
 
+
     @Inject
     public ElasticsearchClient(ElasticsearchConfig config, JsonCodec<Map<String, List<ElasticsearchTable>>> catalogCodec)
-            throws IOException
-    {
+            throws IOException {
         requireNonNull(config, "config is null");
         requireNonNull(catalogCodec, "catalogCodec is null");
 
         this.config = config;
         this.catalogCodec = catalogCodec;
-        this.schemas = Suppliers.memoize(schemasSupplier(catalogCodec, config.getMetadata()));
+        this.schemas = Suppliers.memoize(schemasSupplier(catalogCodec, config.getEsServer(),config.getEsPort()));
         this.internalClients = createClients(this.schemas.get());
+        //this.catalog = new HashMap<String,List<ElasticsearchTable>>();
     }
 
-    public ImmutableMap<String, Client> getInternalClients()
-    {
+    public ImmutableMap<String, Client> getInternalClients() {
         return internalClients;
     }
 
-    public Set<String> getSchemaNames()
-    {
+    public Set<String> getSchemaNames() {
         return schemas.get().keySet();
     }
 
-    public Set<String> getTableNames(String schema)
-    {
+    public Set<String> getTableNames(String schema) {
         requireNonNull(schema, "schema is null");
         Map<String, ElasticsearchTable> tables = schemas.get().get(schema);
         if (tables == null) {
@@ -105,12 +116,10 @@ public class ElasticsearchClient
         return tables.keySet();
     }
 
-    public ElasticsearchTable getTable(String schema, String tableName)
-    {
+    public ElasticsearchTable getTable(String schema, String tableName) {
         try {
             updateSchemas();
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
@@ -124,15 +133,16 @@ public class ElasticsearchClient
     }
 
     Map<String, Map<String, ElasticsearchTable>> updateSchemas()
-            throws IOException
-    {
-        schemas = Suppliers.memoize(schemasSupplier(catalogCodec, config.getMetadata()));
+            throws IOException {
 
-        Map<String, Map<String, ElasticsearchTable>> schemasMap = schemas.get();
-        for (Map.Entry<String, Map<String, ElasticsearchTable>> schemaEntry : schemasMap.entrySet()) {
-            Map<String, ElasticsearchTable> tablesMap = schemaEntry.getValue();
-            for (Map.Entry<String, ElasticsearchTable> tableEntry : tablesMap.entrySet()) {
-                updateTableColumns(tableEntry.getValue());
+        if ( schemasMap == null ) {
+            schemas = Suppliers.memoize(schemasSupplier(catalogCodec,config.getEsServer(),config.getEsPort()));
+            schemasMap = schemas.get();
+            for (Map.Entry<String, Map<String, ElasticsearchTable>> schemaEntry : schemasMap.entrySet()) {
+                Map<String, ElasticsearchTable> tablesMap = schemaEntry.getValue();
+                for (Map.Entry<String, ElasticsearchTable> tableEntry : tablesMap.entrySet()) {
+                        updateTableColumns(tableEntry.getValue());
+                }
             }
         }
         schemas = Suppliers.memoize(Suppliers.ofInstance(schemasMap));
@@ -141,8 +151,7 @@ public class ElasticsearchClient
     }
 
     ImmutableOpenMap<String, ImmutableOpenMap<String, MappingMetaData>> getMappings(ElasticsearchTableSource src)
-            throws ExecutionException, InterruptedException
-    {
+            throws ExecutionException, InterruptedException {
         int port = src.getPort();
         String hostAddress = src.getHostAddress();
         String clusterName = src.getClusterName();
@@ -167,34 +176,36 @@ public class ElasticsearchClient
     }
 
     Set<ElasticsearchColumn> getColumns(ElasticsearchTableSource src)
-            throws ExecutionException, InterruptedException, IOException, JSONException
-    {
+            throws ExecutionException, InterruptedException, IOException, JSONException {
         Set<ElasticsearchColumn> result = new HashSet();
+
         String type = src.getType();
         ImmutableOpenMap<String, ImmutableOpenMap<String, MappingMetaData>> allMappings = getMappings(src);
 
         // what makes sense is to get the reunion of all the columns from all the mappings for the specified document type
-        for (ObjectCursor<String> currentIndex : allMappings.keys()) {
+        for (ObjectCursor<String> currentIndex : allMappings.keys()) {//这个会有并行执行的可能 ffpeng
+            //for(Iterator<ObjectCursor<String>> currentIndex = allMappings.keys().iterator(); currentIndex.hasNext(); )
             MappingMetaData mappingMetaData = allMappings.get(currentIndex.value).get(type);
             JSONObject json = new JSONObject(mappingMetaData.source().toString())
                     .getJSONObject(type)
                     .getJSONObject("properties");
 
             List<String> allColumnMetadata = getColumnsMetadata(null, json);
+            HashMap<String, Integer> filter = new HashMap<String, Integer>();
             for (String columnMetadata : allColumnMetadata) {
-                ElasticsearchColumn clm = createColumn(columnMetadata);
+                ElasticsearchColumn clm = createColumn(columnMetadata, filter,currentIndex.value,type);
                 if (!(clm == null)) {
                     result.add(clm);
                 }
             }
+            int a;
         }
 
         return result;
     }
 
     List<String> getColumnsMetadata(String parent, JSONObject json)
-            throws JSONException
-    {
+            throws JSONException {
         List<String> leaves = new ArrayList();
 
         Iterator it = json.keys();
@@ -203,27 +214,30 @@ public class ElasticsearchClient
             Object child = json.get(key);
             String childKey = parent == null || parent.isEmpty() ? key : parent.concat(".").concat(key);
 
-            if (child instanceof JSONObject) {
-                leaves.addAll(getColumnsMetadata(childKey, (JSONObject) child));
-            }
-            else if (child instanceof JSONArray) {
+            if (child instanceof JSONObject) {//如果存在嵌套的object的情况下，如何区分
+                if (((JSONObject) child).has("properties")) {
+                    leaves.addAll(getColumnsMetadata(childKey, (JSONObject) ((JSONObject) child).getJSONObject("properties")));
+                } else {
+                    leaves.addAll(getColumnsMetadata(childKey, (JSONObject) child));
+                }
+            } else if (child instanceof JSONArray) {
                 // ignoring arrays for now
                 continue;
-            }
-            else {
-                leaves.add(childKey.concat(":").concat(child.toString()));
+            } else {
+                if ("type".equals(key))//只提取type字段
+                    leaves.add(childKey.concat(":").concat(child.toString()));
             }
         }
 
         return leaves;
     }
 
-    ElasticsearchColumn createColumn(String fieldPathType)
-            throws JSONException, IOException
-    {
+    ElasticsearchColumn createColumn(String fieldPathType, HashMap<String, Integer> filter,String indexName, String typeName)
+            throws JSONException, IOException {
         String[] items = fieldPathType.split(":");
         String type = items[1];
         String path = items[0];
+        String dateFormat="";
         Type prestoType;
 
         if (items.length != 2) {
@@ -252,18 +266,40 @@ public class ElasticsearchClient
             case "string":
                 prestoType = VARCHAR;
                 break;
+            case "date":
+                prestoType = TIMESTAMP;//todo  读取时间数据异常
+                break;
+            case "boolean":
+                prestoType = BOOLEAN;
+                break;
             default:
                 log.error("Unsupported column type. Ignoring...");
+                log.error(type + " " +fieldPathType);
                 return null;
         }
 
         path = path.substring(0, path.lastIndexOf('.'));
         //path = path.replaceAll("\\.properties\\.", ".");
-        return new ElasticsearchColumn(path.replaceAll("\\.", "_"), prestoType, path, type);
+
+        String originalPath = path;
+        path = path.replaceAll("\\.", "_");
+
+        String lowkey = path.toLowerCase();
+        if(filter.containsKey(lowkey))
+        {
+            int size = filter.get(lowkey);
+            path = path.concat("_dup"+ size);
+            filter.put(lowkey, size+1);
+        }
+        else
+        {
+            filter.put(lowkey, 0);
+        }
+
+        return new ElasticsearchColumn(path, prestoType, originalPath, type, dateFormat);
     }
 
-    void updateTableColumns(ElasticsearchTable table)
-    {
+    void updateTableColumns(ElasticsearchTable table) {
         Set<ElasticsearchColumn> columns = new HashSet();
 
         // the table can have multiple sources
@@ -271,8 +307,7 @@ public class ElasticsearchClient
         for (ElasticsearchTableSource src : table.getSources()) {
             try {
                 columns.addAll(getColumns(src));
-            }
-            catch (ExecutionException | InterruptedException | IOException | JSONException e) {
+            } catch (ExecutionException | InterruptedException | IOException | JSONException e) {
                 e.printStackTrace();
             }
         }
@@ -286,39 +321,79 @@ public class ElasticsearchClient
                 .collect(Collectors.toList()));
     }
 
-    static Map<String, Map<String, ElasticsearchTable>> lookupSchemas(URI metadataUri, JsonCodec<Map<String, List<ElasticsearchTable>>> catalogCodec)
-            throws IOException
-    {
-        URL url = metadataUri.toURL();
-        log.debug("url: " + url);
+    static Map<String, Map<String, ElasticsearchTable>> lookupSchemas(JsonCodec<Map<String, List<ElasticsearchTable>>> catalogCodec)
+            throws IOException {
 
-        String tableMappings = Resources.toString(url, UTF_8);
-        log.debug("tableMappings: " + tableMappings);
+        //Map<String, List<ElasticsearchTable>> catalog = catalogCodec.fromJson(tableMappings);
 
-        Map<String, List<ElasticsearchTable>> catalog = catalogCodec.fromJson(tableMappings);
-       /* Set<String> tables = catalog.keySet();
-        for(String key )
-*/
+        if (initialized == 0) {
+
+            //catalog = catalogCodec.fromJson(tableMappings);
+
+            //construct the es client
+            Settings settings = ImmutableSettings.settingsBuilder()
+                    .put("cluster.name", config.getEsClusterName())
+                    .build();
+
+
+            String esServerAddr = config.getEsServer();
+            Integer esPort = config.getEsPort();
+            String esClusterName = config.getEsClusterName();
+
+            Client transportClient = new TransportClient(settings).addTransportAddress(new InetSocketTransportAddress(esServerAddr, esPort));
+            IndicesAdminClient indicesAdmin = transportClient.admin().indices();
+
+            ImmutableOpenMap<String, ImmutableOpenMap<String, MappingMetaData>> f =
+                    indicesAdmin.getMappings(new GetMappingsRequest()).actionGet().getMappings();
+
+            Map<String, List<String>> indexTypeMapping = new HashMap<String, List<String>>();
+            List<String> typeList = null;
+            List<ElasticsearchTable> tblList = null;
+
+            //index的名陈列表
+            Object[] indexList = f.keys().toArray();
+            for (Object indexObj : indexList) {
+                String index = indexObj.toString();
+                ImmutableOpenMap<String, MappingMetaData> mapping = f.get(index);
+                typeList = new ArrayList<String>();
+                tblList = new ArrayList<ElasticsearchTable>();
+
+                for (ObjectObjectCursor<String, MappingMetaData> c : mapping) {
+                    typeList.add(c.key);
+                    ElasticsearchTableSource tblSource = new ElasticsearchTableSource(esServerAddr, esPort, esClusterName, index, c.key);
+                    List<ElasticsearchTableSource> tblSrcList = new ArrayList<ElasticsearchTableSource>();
+                    tblSrcList.add(tblSource);
+                    ElasticsearchTable esTable = new ElasticsearchTable(c.key, tblSrcList);
+                    tblList.add(esTable);
+                }
+                indexTypeMapping.put(index, typeList);
+                catalog.put(index.replace("-", "_"), tblList);
+            }
+
+            transportClient.close();
+
+            initialized = 1;
+        }
+
         return ImmutableMap.copyOf(
                 transformValues(
                         catalog,
                         resolveAndIndexTablesFunction()));
     }
 
-    static Supplier<Map<String, Map<String, ElasticsearchTable>>> schemasSupplier(final JsonCodec<Map<String, List<ElasticsearchTable>>> catalogCodec, final URI metadataUri)
-    {
+    static Supplier<Map<String, Map<String, ElasticsearchTable>>> schemasSupplier(final JsonCodec<Map<String, List<ElasticsearchTable>>> catalogCodec,
+                                                                                  final String esServer,
+                                                                                  final int esPort) {
         return () -> {
             try {
-                return lookupSchemas(metadataUri, catalogCodec);
-            }
-            catch (IOException e) {
+                return lookupSchemas(catalogCodec);
+            } catch (IOException e) {
                 throw Throwables.propagate(e);
             }
         };
     }
 
-    static Function<List<ElasticsearchTable>, Map<String, ElasticsearchTable>> resolveAndIndexTablesFunction()
-    {
+    static Function<List<ElasticsearchTable>, Map<String, ElasticsearchTable>> resolveAndIndexTablesFunction() {
         return tables -> ImmutableMap.copyOf(
                 uniqueIndex(
                         transform(
@@ -327,9 +402,9 @@ public class ElasticsearchClient
                         ElasticsearchTable::getName));
     }
 
-    static ImmutableMap<String, Client> createClients(Map<String, Map<String, ElasticsearchTable>> schemas)
-    {
+    static ImmutableMap<String, Client> createClients(Map<String, Map<String, ElasticsearchTable>> schemas) {
         Map<String, Client> transportClients = new HashMap<String, Client>();
+
 
         for (String key : schemas.keySet()) {
             Map<String, ElasticsearchTable> tableMap = schemas.get(key);

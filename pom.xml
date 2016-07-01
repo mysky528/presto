@@ -71,6 +71,7 @@
         <module>presto-cassandra</module>
         <module>presto-blackhole</module>
         <module>presto-orc</module>
+        <module>presto-elasticsearch</module>
         <module>presto-hive</module>
         <module>presto-hive-hadoop1</module>
         <module>presto-hive-hadoop2</module>

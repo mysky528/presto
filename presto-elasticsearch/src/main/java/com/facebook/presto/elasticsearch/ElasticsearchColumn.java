@@ -29,19 +29,22 @@ public final class ElasticsearchColumn
     private final Type type;
     private final String jsonPath;
     private final String jsonType;
+    private final String dateFormat;
 
     @JsonCreator
     public ElasticsearchColumn(
             @JsonProperty("name") String name,
             @JsonProperty("type") Type type,
             @JsonProperty("jsonPath") String jsonPath,
-            @JsonProperty("jsonType") String jsonType)
+            @JsonProperty("jsonType") String jsonType,
+            @JsonProperty("dateFormat") String dateFormat)
     {
         checkArgument(!isNullOrEmpty(name), "name is null or is empty");
         this.name = name;
         this.type = requireNonNull(type, "type is null");
         this.jsonPath = requireNonNull(jsonPath, "jsonPath is null");
         this.jsonType = requireNonNull(jsonType, "jsonType is null");
+        this.dateFormat = requireNonNull(dateFormat,"dateFormat is null");
     }
 
     @JsonProperty
@@ -68,6 +71,9 @@ public final class ElasticsearchColumn
         return jsonType;
     }
 
+    @JsonProperty
+    public String getDateFormat() { return dateFormat; }
+
     @Override
     public int hashCode()
     {
@@ -88,12 +94,13 @@ public final class ElasticsearchColumn
         return Objects.equals(this.name, other.name) &&
                 Objects.equals(this.type, other.type) &&
                 Objects.equals(this.jsonPath, other.jsonPath) &&
-                Objects.equals(this.jsonType, other.jsonType);
+                Objects.equals(this.jsonType, other.jsonType) &&
+                Objects.equals(this.dateFormat, other.dateFormat);
     }
 
     @Override
     public String toString()
     {
-        return name + ":" + type + ":" + jsonPath + ":" + jsonType;
+        return name + ":" + type + ":" + jsonPath + ":" + jsonType + ":"+dateFormat;
     }
 }

@@ -46,6 +46,7 @@ public class ElasticsearchModule
     @Override
     public void configure(Binder binder)
     {
+        //绑定各种类，可以避免显示的写入
         binder.bind(TypeManager.class).toInstance(typeManager);
 
         binder.bind(ElasticsearchConnector.class).in(Scopes.SINGLETON);

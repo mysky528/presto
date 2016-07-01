@@ -20,12 +20,17 @@ import com.facebook.presto.spi.ConnectorTableLayoutHandle;
 import com.facebook.presto.spi.FixedSplitSource;
 import com.facebook.presto.spi.connector.ConnectorSplitManager;
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
+import org.elasticsearch.action.admin.indices.settings.get.GetSettingsRequest;
+import org.elasticsearch.action.admin.indices.settings.get.GetSettingsResponse;
+import org.elasticsearch.client.Client;
+import org.elasticsearch.common.settings.Settings;
 
 import javax.inject.Inject;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static com.facebook.presto.elasticsearch.Types.checkType;
 import static com.google.common.base.Preconditions.checkState;
@@ -49,15 +54,32 @@ public class ElasticsearchSplitManager
         ElasticsearchTableLayoutHandle layoutHandle = checkType(layout, ElasticsearchTableLayoutHandle.class, "partition");
         ElasticsearchTableHandle tableHandle = layoutHandle.getTable();
         ElasticsearchTable table = elasticsearchClient.getTable(tableHandle.getSchemaName(), tableHandle.getTableName());
+
         // this can happen if table is removed during a query
         checkState(table != null, "Table %s.%s no longer exists", tableHandle.getSchemaName(), tableHandle.getTableName());
 
+        //try to get shard number
+        ElasticsearchTableSource uri = table.getSources().get(0);
+        Client client = elasticsearchClient.getInternalClients().get(uri.getClusterName());
+        String esIndexName = table.getSources().get(0).getIndex();
+        GetSettingsRequest settingRequest = new GetSettingsRequest().indices(table.getSources().get(0).getIndex());
         List<ConnectorSplit> splits = new ArrayList<>();
-        for (ElasticsearchTableSource uri : table.getSources()) {
-            int clmsCount = table.getColumns().size();
-            splits.add(new ElasticsearchSplit(connectorId, tableHandle.getSchemaName(), tableHandle.getTableName(), uri));
+
+        try {
+            GetSettingsResponse gettingResp = client.admin().indices().getSettings(settingRequest).get();
+            Settings contents = gettingResp.getIndexToSettings().get(esIndexName);
+
+            int shardNumber = Integer.valueOf(contents.get("index.number_of_shards"));
+
+            for (int shardId = 0; shardId < shardNumber; shardId ++ ) {
+                splits.add(new ElasticsearchSplit(connectorId, tableHandle.getSchemaName(), tableHandle.getTableName(), shardId, layoutHandle.getTupleDomain(),uri));
+            }
+
+            Collections.shuffle(splits);
+
+        }catch(Exception ex) {
+            System.out.println(ex.getMessage());
         }
-        Collections.shuffle(splits);
 
         return new FixedSplitSource(connectorId, splits);
     }

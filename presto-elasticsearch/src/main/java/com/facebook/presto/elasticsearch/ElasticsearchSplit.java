@@ -13,11 +13,14 @@
  */
 package com.facebook.presto.elasticsearch;
 
+import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.HostAddress;
+import com.facebook.presto.spi.predicate.TupleDomain;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
+import org.elasticsearch.common.collect.Tuple;
 
 import java.util.List;
 
@@ -29,21 +32,28 @@ public class ElasticsearchSplit
     private final String connectorId;
     private final String schemaName;
     private final String tableName;
+    private final int shardId;
     private final ElasticsearchTableSource uri;
     private final boolean remotelyAccessible;
     private final ImmutableList<HostAddress> addresses;
+    private final TupleDomain<ColumnHandle> tupleDomain;
 
     @JsonCreator
     public ElasticsearchSplit(
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("schemaName") String schemaName,
             @JsonProperty("tableName") String tableName,
+            @JsonProperty("shardId") int shardId,
+            @JsonProperty("tupleDomain") TupleDomain<ColumnHandle> tupleDomain,
             @JsonProperty("uri") ElasticsearchTableSource uri)
     {
+        //添加TupleDomain到ElasticsearchSplit中
         this.schemaName = requireNonNull(schemaName, "schema name is null");
         this.connectorId = requireNonNull(connectorId, "connector id is null");
         this.tableName = requireNonNull(tableName, "table name is null");
         this.uri = requireNonNull(uri, "uri is null");
+        this.shardId = requireNonNull(shardId, "shardId is null");
+        this.tupleDomain = requireNonNull(tupleDomain,"tupleDomain is null");
 
 //        if ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) {
         remotelyAccessible = true;
@@ -60,13 +70,20 @@ public class ElasticsearchSplit
     @JsonProperty
     public String getSchemaName()
     {
+        //数据库名称
         return schemaName;
     }
 
     @JsonProperty
     public String getTableName()
     {
+        //表名称
         return tableName;
+    }
+
+    @JsonProperty
+    public TupleDomain<ColumnHandle> getTupleDomain() {
+        return tupleDomain;
     }
 
     @JsonProperty
@@ -74,6 +91,9 @@ public class ElasticsearchSplit
     {
         return uri;
     }
+
+    @JsonProperty
+    public int getShardId() {return shardId;}
 
     @Override
     public boolean isRemotelyAccessible()

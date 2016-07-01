@@ -33,10 +33,12 @@ public class ElasticsearchTable
     private List<ElasticsearchColumn> columns;
     private List<ElasticsearchColumnMetadata> columnsMetadata;
     private final List<ElasticsearchTableSource> sources;
+    private static boolean columnReady = false;
 
     @JsonCreator
     public ElasticsearchTable(
             @JsonProperty("name") String name,
+            //@JsonProperty("tupleDomain")
             @JsonProperty("sources") List<ElasticsearchTableSource> sources)
     {
         checkArgument(!isNullOrEmpty(name), "name is null or is empty");
@@ -58,6 +60,7 @@ public class ElasticsearchTable
 
     public void setColumns(List<ElasticsearchColumn> columns)
     {
+        columnReady = true;
         this.columns = columns;
     }
 
@@ -81,5 +84,9 @@ public class ElasticsearchTable
     public void setColumnsMetadata(List<ElasticsearchColumnMetadata> columnsMetadata)
     {
         this.columnsMetadata = columnsMetadata;
+    }
+
+    public boolean getColumnReady() {
+        return columnReady;
     }
 }

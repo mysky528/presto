@@ -13,9 +13,17 @@
  */
 package com.facebook.presto.elasticsearch;
 
+import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.ConnectorTableLayoutHandle;
+import com.facebook.presto.spi.predicate.NullableValue;
+import com.facebook.presto.spi.predicate.TupleDomain;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+
+
+import java.util.Map;
+import java.util.function.Predicate;
+
 
 import static java.util.Objects.requireNonNull;
 
@@ -23,11 +31,16 @@ public class ElasticsearchTableLayoutHandle
         implements ConnectorTableLayoutHandle
 {
     private final ElasticsearchTableHandle table;
+    private TupleDomain<ColumnHandle> tupleDomain;
+
 
     @JsonCreator
-    public ElasticsearchTableLayoutHandle(@JsonProperty("table") ElasticsearchTableHandle table)
+    public ElasticsearchTableLayoutHandle(
+            @JsonProperty("table") ElasticsearchTableHandle table,
+            @JsonProperty("tupleDomain") TupleDomain<ColumnHandle> tupleDomain)
     {
         this.table = requireNonNull(table, "table is null");
+        this.tupleDomain = tupleDomain;
     }
 
     @JsonProperty
@@ -35,6 +48,13 @@ public class ElasticsearchTableLayoutHandle
     {
         return table;
     }
+
+    @JsonProperty
+    public TupleDomain<ColumnHandle> getTupleDomain()
+    {
+        return tupleDomain;
+    }
+
 
     @Override
     public String toString()

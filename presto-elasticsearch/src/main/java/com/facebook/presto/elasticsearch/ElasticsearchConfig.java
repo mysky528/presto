@@ -21,18 +21,46 @@ import java.net.URI;
 
 public class ElasticsearchConfig
 {
-    private URI metadata;
+    private String esServer;
+    private String clusterName;
+    private int esPort;
 
+    /*
     @NotNull
     public URI getMetadata()
     {
         return metadata;
     }
+    */
 
-    @Config("metadata-uri")
-    public ElasticsearchConfig setMetadata(URI metadata)
-    {
-        this.metadata = metadata;
+    @NotNull
+    public String getEsServer() { return esServer;}
+
+    @NotNull
+    public String getEsClusterName() {
+        return clusterName;
+    }
+
+    @NotNull
+    public int getEsPort() {
+        return esPort;
+    }
+
+    @Config("elasticsearch-server")
+    public ElasticsearchConfig setEsServer(String nodes) {
+        this.esServer = nodes;
+        return this;
+    }
+
+    @Config("elasticsearch-port")
+    public ElasticsearchConfig setEsPort(String port) {
+        this.esPort = Integer.valueOf(port);
+        return this;
+    }
+
+    @Config("elasticsearch-clustername")
+    public ElasticsearchConfig setEsClusterName(String clusterName) {
+        this.clusterName = clusterName;
         return this;
     }
 }
