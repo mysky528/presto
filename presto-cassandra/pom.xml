@@ -14,7 +14,7 @@
     <properties>
         <air.main.basedir>${project.parent.basedir}</air.main.basedir>
         <cassandra.version>2.1.0</cassandra.version>
-        <datastax.version>2.1.5</datastax.version>
+        <datastax.version>4.0.0</datastax.version>
     </properties>
 
     <dependencies>
@@ -314,7 +314,7 @@
                     <!--to a bug or configuration error in the embedded-->
                     <!--cassandra instance.  This problem results in either-->
                     <!--a hang in Thrift calls or broken sockets.-->
-                    <parallel />
+                    <parallel/>
                     <threadCount>1</threadCount>
 
                     <!-- integration tests take a very long time so only run them in the CI server -->
@@ -366,7 +366,7 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
-                            <excludes combine.self="override" />
+                            <excludes combine.self="override"/>
                         </configuration>
                     </plugin>
                 </plugins>
