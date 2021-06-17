@@ -45,10 +45,10 @@
         <air.java.version>1.8.0-40</air.java.version>
 
         <dep.antlr.version>4.5.1</dep.antlr.version>
-        <dep.airlift.version>0.124</dep.airlift.version>
+        <dep.airlift.version>1.0</dep.airlift.version>
         <dep.packaging.version>${dep.airlift.version}</dep.packaging.version>
         <dep.slice.version>0.19</dep.slice.version>
-        <dep.aws-sdk.version>1.9.40</dep.aws-sdk.version>
+        <dep.aws-sdk.version>1.11.882</dep.aws-sdk.version>
 
         <cli.skip-execute>true</cli.skip-execute>
         <cli.main-class>None</cli.main-class>
@@ -293,7 +293,7 @@
             <dependency>
                 <groupId>com.facebook.hive</groupId>
                 <artifactId>hive-dwrf</artifactId>
-                <version>0.8</version>
+                <version>0.12</version>
                 <exclusions>
                     <exclusion>
                         <groupId>commons-logging</groupId>
@@ -316,7 +316,7 @@
             <dependency>
                 <groupId>com.facebook.hive</groupId>
                 <artifactId>hive-dwrf-shims</artifactId>
-                <version>0.8</version>
+                <version>0.9</version>
                 <exclusions>
                     <exclusion>
                         <artifactId>commons-logging</artifactId>
@@ -800,7 +800,7 @@
                                         </goals>
                                     </pluginExecutionFilter>
                                     <action>
-                                        <ignore />
+                                        <ignore/>
                                     </action>
                                 </pluginExecution>
                                 <pluginExecution>
@@ -813,7 +813,7 @@
                                         </goals>
                                     </pluginExecutionFilter>
                                     <action>
-                                        <ignore />
+                                        <ignore/>
                                     </action>
                                 </pluginExecution>
                                 <pluginExecution>
@@ -826,7 +826,7 @@
                                         </goals>
                                     </pluginExecutionFilter>
                                     <action>
-                                        <ignore />
+                                        <ignore/>
                                     </action>
                                 </pluginExecution>
                                 <pluginExecution>
@@ -839,7 +839,7 @@
                                         </goals>
                                     </pluginExecutionFilter>
                                     <action>
-                                        <ignore />
+                                        <ignore/>
                                     </action>
                                 </pluginExecution>
                                 <pluginExecution>
@@ -852,7 +852,7 @@
                                         </goals>
                                     </pluginExecutionFilter>
                                     <action>
-                                        <ignore />
+                                        <ignore/>
                                     </action>
                                 </pluginExecution>
                                 <pluginExecution>
@@ -865,7 +865,7 @@
                                         </goals>
                                     </pluginExecutionFilter>
                                     <action>
-                                        <ignore />
+                                        <ignore/>
                                     </action>
                                 </pluginExecution>
                                 <pluginExecution>
@@ -881,7 +881,7 @@
                                         </goals>
                                     </pluginExecutionFilter>
                                     <action>
-                                        <ignore />
+                                        <ignore/>
                                     </action>
                                 </pluginExecution>
                                 <pluginExecution>
@@ -894,7 +894,7 @@
                                         </goals>
                                     </pluginExecutionFilter>
                                     <action>
-                                        <ignore />
+                                        <ignore/>
                                     </action>
                                 </pluginExecution>
                             </pluginExecutions>
